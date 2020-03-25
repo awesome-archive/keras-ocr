@@ -104,25 +104,38 @@ def compute_maps(heatmap, image_height, image_width, lines):
                     [0, heatmap.shape[0]]]).astype('float32')
 
     for line in lines:
+        line, orientation = tools.fix_line(line)
         previous_link_points = None
         for [(x1, y1), (x2, y2), (x3, y3), (x4, y4)], c in line:
+            x1, y1, x2, y2, x3, y3, x4, y4 = map(lambda v: max(v, 0),
+                                                 [x1, y1, x2, y2, x3, y3, x4, y4])
             if c == ' ':
                 previous_link_points = None
                 continue
             yc = (y4 + y1 + y3 + y2) / 4
             xc = (x1 + x2 + x3 + x4) / 4
-
-            current_link_points = np.array([[(xc + (x1 + x2) / 2) / 2, (yc + (y1 + y2) / 2) / 2],
-                                            [(xc + (x3 + x4) / 2) / 2,
-                                             (yc + (y3 + y4) / 2) / 2]]) / 2
+            if orientation == 'horizontal':
+                current_link_points = np.array([[
+                    (xc + (x1 + x2) / 2) / 2, (yc + (y1 + y2) / 2) / 2
+                ], [(xc + (x3 + x4) / 2) / 2, (yc + (y3 + y4) / 2) / 2]]) / 2
+            else:
+                current_link_points = np.array([[
+                    (xc + (x1 + x4) / 2) / 2, (yc + (y1 + y4) / 2) / 2
+                ], [(xc + (x2 + x3) / 2) / 2, (yc + (y2 + y3) / 2) / 2]]) / 2
             character_points = np.array([[x1, y1], [x2, y2], [x3, y3], [x4, y4]
                                          ]).astype('float32') / 2
             # pylint: disable=unsubscriptable-object
             if previous_link_points is not None:
-                link_points = np.array([
-                    previous_link_points[0], current_link_points[0], current_link_points[1],
-                    previous_link_points[1]
-                ])
+                if orientation == 'horizontal':
+                    link_points = np.array([
+                        previous_link_points[0], current_link_points[0], current_link_points[1],
+                        previous_link_points[1]
+                    ])
+                else:
+                    link_points = np.array([
+                        previous_link_points[0], previous_link_points[1], current_link_points[1],
+                        current_link_points[0]
+                    ])
                 ML = cv2.getPerspectiveTransform(
                     src=src,
                     dst=link_points.astype('float32'),
@@ -202,9 +215,9 @@ def getBoxes(y_pred,
                 cv2.getStructuringElement(cv2.MORPH_RECT, (1 + niter, 1 + niter)))
 
             # Make rotated box from contour
-            contours, _ = cv2.findContours(segmap.astype('uint8'),
-                                           mode=cv2.RETR_TREE,
-                                           method=cv2.CHAIN_APPROX_SIMPLE)
+            contours = cv2.findContours(segmap.astype('uint8'),
+                                        mode=cv2.RETR_TREE,
+                                        method=cv2.CHAIN_APPROX_SIMPLE)[-2]
             contour = contours[0]
             box = cv2.boxPoints(cv2.minAreaRect(contour))
 
@@ -335,8 +348,8 @@ def build_keras_model(weights_path: str = None, backbone_name='vgg'):
     y = keras.layers.Activation('relu', name='conv_cls.7')(y)
     y = keras.layers.Conv2D(filters=2, kernel_size=1, strides=1, padding='same',
                             name='conv_cls.8')(y)
-    y = keras.layers.Lambda(lambda x: keras.backend.clip(x, 0, 1))(y)
-
+    if backbone_name != 'vgg':
+        y = keras.layers.Activation('sigmoid')(y)
     model = keras.models.Model(inputs=inputs, outputs=y)
     if weights_path is not None:
         if weights_path.endswith('.h5'):
@@ -552,11 +565,13 @@ def build_torch_model(weights_path=None):
 
 PRETRAINED_WEIGHTS = {
     ('clovaai_general', True): {
-        'url': 'https://storage.googleapis.com/keras-ocr/craft_mlt_25k.pth',
+        'url': 'https://www.mediafire.com/file/qh2ullnnywi320s/craft_mlt_25k.pth/file',
+        'filename': 'craft_mlt_25k.pth',
         'sha256': '4a5efbfb48b4081100544e75e1e2b57f8de3d84f213004b14b85fd4b3748db17'
     },
     ('clovaai_general', False): {
-        'url': 'https://storage.googleapis.com/keras-ocr/craft_mlt_25k.h5',
+        'url': 'https://www.mediafire.com/file/mepzf3sq7u7nve9/craft_mlt_25k.h5/file',
+        'filename': 'craft_mlt_25k.h5',
         'sha256': '7283ce2ff05a0617e9740c316175ff3bacdd7215dbdf1a726890d5099431f899'
     }
 }
@@ -584,6 +599,7 @@ class Detector:
                 'Selected weights configuration not found.'
             weights_config = PRETRAINED_WEIGHTS[pretrained_key]
             weights_path = tools.download_and_verify(url=weights_config['url'],
+                                                     filename=weights_config['filename'],
                                                      sha256=weights_config['sha256'])
         else:
             weights_path = None
@@ -633,7 +649,8 @@ class Detector:
                detection_threshold=0.7,
                text_threshold=0.4,
                link_threshold=0.4,
-               size_threshold=10):
+               size_threshold=10,
+               **kwargs):
         """Recognize the text in a set of images.
 
         Args:
@@ -644,7 +661,7 @@ class Detector:
         boxes = []
         for image in images:
             boxes.append(
-                getBoxes(self.model.predict(image[np.newaxis]),
+                getBoxes(self.model.predict(image[np.newaxis], **kwargs),
                          detection_threshold=detection_threshold,
                          text_threshold=text_threshold,
                          link_threshold=link_threshold,

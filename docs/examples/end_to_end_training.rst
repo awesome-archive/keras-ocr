@@ -54,7 +54,7 @@ With a set of fonts, backgrounds, and alphabet, we now build our data generators
 
 In order to create images, we need random strings. :code:`keras-ocr` has a simple method for this for English, but anything that generates strings of characters in your selected alphabet will do!
 
-The image generator generates `(image, lines)` tuples where `image` is a HxWx3 image and `lines` is a list of lines of text in the image where each line is itself a list of tuples of the form :code:`((x1, y1), (x2, y2), (x3, y3), (x4, y4), c)`. `c` is the character in the line and :code:`(x1, y2), (x2, y2), (x3, y3),
+The image generator generates `(image, lines)` tuples where `image` is a HxWx3 image and `lines` is a list of lines of text in the image where each line is itself a list of tuples of the form :code:`((x1, y1), (x2, y2), (x3, y3), (x4, y4), c)`. `c` is the character in the line and :code:`(x1, y1), (x2, y2), (x3, y3),
 (x4, y4)` define the bounding coordinates in clockwise order starting from the top left. You can replace this with your own generator, just be sure to match that function signature.
 
 We split our generators into train, validation, and test by separating the fonts and backgrounds used in each.
@@ -110,14 +110,11 @@ Here we build our detector and recognizer models. For both, we'll start with pre
 
     detector = keras_ocr.detection.Detector(weights='clovaai_general')
     recognizer = keras_ocr.recognition.Recognizer(
-        width=200,
-        height=31,
-        stn=True,
         alphabet=recognizer_alphabet,
         weights='kurapan',
-        optimizer='RMSprop',
         include_top=False
     )
+    recognizer.compile()
     for layer in recognizer.backbone.layers:
         layer.trainable = False
 
@@ -226,13 +223,16 @@ Once training is done, you can use :code:`recognize` to extract text.
 
 .. code-block:: python
     
-    pipeline = keras_ocr.pipelines.Pipeline(detector=detector, recognizer=recognizer)
-    image, text, lines = next(image_generators[0])
-    predictions = pipeline.recognize(image=image)
+    pipeline = keras_ocr.pipeline.Pipeline(detector=detector, recognizer=recognizer)
+    image, lines = next(image_generators[0])
+    predictions = pipeline.recognize(images=[image])[0]
     drawn = keras_ocr.tools.drawBoxes(
         image=image, boxes=predictions, boxes_format='predictions'
     )
-    print('Actual:', text, 'Predicted:', [text for text, box in predictions])
+    print(
+        'Actual:', '\n'.join([' '.join([character for _, character in line]) for line in lines]),
+        'Predicted:', [text for text, box in predictions]
+    )
     plt.imshow(drawn)
 
 .. image:: ../_static/predicted1.jpg

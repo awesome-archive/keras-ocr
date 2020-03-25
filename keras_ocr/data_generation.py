@@ -68,12 +68,11 @@ def get_maximum_uniform_contour(image, fontsize, margin=0):
     gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
     blurred = cv2.blur(src=gray, ksize=(fontsize // 2, fontsize // 2))
     _, threshold = cv2.threshold(src=blurred, thresh=255 / 2, maxval=255, type=cv2.THRESH_BINARY)
-    contoursDark, _ = cv2.findContours(255 - threshold,
-                                       mode=cv2.RETR_TREE,
-                                       method=cv2.CHAIN_APPROX_SIMPLE)
-    contoursLight, _ = cv2.findContours(threshold,
-                                        mode=cv2.RETR_TREE,
-                                        method=cv2.CHAIN_APPROX_SIMPLE)
+    contoursDark = cv2.findContours(255 - threshold,
+                                    mode=cv2.RETR_TREE,
+                                    method=cv2.CHAIN_APPROX_SIMPLE)[-2]
+    contoursLight = cv2.findContours(threshold, mode=cv2.RETR_TREE,
+                                     method=cv2.CHAIN_APPROX_SIMPLE)[-2]
     areasDark = list(map(cv2.contourArea, contoursDark))
     areasLight = list(map(cv2.contourArea, contoursLight))
     maxDarkArea = max(areasDark) if areasDark else 0
@@ -169,8 +168,9 @@ def get_backgrounds(cache_dir=None):
         cache_dir = os.path.expanduser(os.path.join('~', '.keras-ocr'))
     backgrounds_dir = os.path.join(cache_dir, 'backgrounds')
     backgrounds_zip_path = tools.download_and_verify(
-        url='https://storage.googleapis.com/keras-ocr/backgrounds.zip',
+        url='https://www.mediafire.com/file/l0pdx5j860kqmyr/backgrounds.zip/file',
         sha256='f263ed0d55de303185cc0f93e9fcb0b13104d68ed71af7aaaa8e8c91389db471',
+        filename='backgrounds.zip',
         cache_dir=cache_dir)
     if len(glob.glob(os.path.join(backgrounds_dir, '*'))) != 1035:
         with zipfile.ZipFile(backgrounds_zip_path) as zfile:
@@ -199,8 +199,9 @@ def get_fonts(cache_dir=None,
     if cache_dir is None:
         cache_dir = os.path.expanduser(os.path.join('~', '.keras-ocr'))
     fonts_zip_path = tools.download_and_verify(
-        url='https://storage.googleapis.com/keras-ocr/fonts.zip',
+        url='https://www.mediafire.com/file/6v9r9oztyri0jrc/fonts.zip/file',
         sha256='d4d90c27a9bc4bf8fff1d2c0a00cfb174c7d5d10f60ed29d5f149ef04d45b700',
+        filename='fonts.zip',
         cache_dir=cache_dir)
     fonts_dir = os.path.join(cache_dir, 'fonts')
     if len(glob.glob(os.path.join(fonts_dir, '**/*.ttf'))) != 2746:
@@ -211,8 +212,9 @@ def get_fonts(cache_dir=None,
     if exclude_smallcaps:
         with open(
                 tools.download_and_verify(
-                    url='https://storage.googleapis.com/keras-ocr/fonts_smallcaps.txt',
+                    url='https://www.mediafire.com/file/v2o7hxn0mapne7i/fonts_smallcaps.txt/file',
                     sha256='6531c700523c687f02852087530d1ab3c7cc0b59891bbecc77726fbb0aabe68e',
+                    filename='fonts_smallcaps.txt',
                     cache_dir=cache_dir), 'r') as f:
             smallcaps_fonts = f.read().split('\n')
             font_filepaths = [
